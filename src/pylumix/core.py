@@ -204,6 +204,32 @@ class LumixCamera:
             print(f"Failed to download {url}: {e}")
             return None
 
+    def get_latest_item(self):
+        """Get the most recently added item info."""
+        try:
+            # We need total count to find the index of the last item
+            total = self.total_content_number()
+            if total > 0:
+                # Browse requesting 1 item at proper index (0-based)
+                # Assumes content is appended at the end
+                items = self.browse(start_index=total - 1, count=1)
+                if items:
+                    return items[0]
+        except Exception as e:
+            logger.error(f"Failed to get latest item: {e}")
+        return None
+
+    def download_to_memory(self, filename):
+        """Download a file into memory."""
+        url = urljoin(self.binary_base_url, filename.lstrip("/"))
+        try:
+            with requests.get(url, timeout=30) as r:
+                r.raise_for_status()
+                return r.content
+        except Exception as e:
+            logger.error(f"Failed to download {url}: {e}")
+            return None
+
     def browse(self, object_id="0", start_index=0, count=15):
         """Browse content using UPnP ContentDirectory service."""
         self.cam_cmd("playmode")
