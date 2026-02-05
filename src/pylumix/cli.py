@@ -6,6 +6,8 @@ import signal
 import xml.etree.ElementTree as ET
 from .core import LumixCamera
 
+logger = logging.getLogger(__name__)
+
 def main():
     parser = argparse.ArgumentParser(description="Control Panasonic Lumix Camera")
     parser.add_argument('--host', default='192.168.54.1', help='Camera IP address')
@@ -37,16 +39,15 @@ def main():
     dl_parser.add_argument('file', help='File path on camera (e.g. /DL1000001.JPG)')
     dl_parser.add_argument('--dest', help='Destination filename')
 
-    # List
-    subparsers.add_parser('ls', help='List content information (raw XML)')
+    # Browse/List
+    ls_parser = subparsers.add_parser('ls', help='List files on camera')
+    ls_parser.add_argument('--start', type=int, default=0, help='Starting index')
+    ls_parser.add_argument('--count', type=int, default=15, help='Number of items')
 
     args = parser.parse_args()
     
     camera = LumixCamera(host=args.host)
-    
-    if not camera.req_acc():
-        print("Failed to authenticate with camera. Check connection.", file=sys.stderr)
-        sys.exit(1)
+    camera.ensure_access()
 
     if args.command == 'info':
         try:
@@ -154,9 +155,17 @@ def main():
             sys.exit(1)
 
     elif args.command == 'ls':
-        print("Getting content info...", file=sys.stderr)
-        info = camera.get_content_info()
-        print(ET.tostring(info, encoding='unicode'))
+        print(f"Browsing items {args.start} to {args.start + args.count}...", file=sys.stderr)
+        items = camera.browse(start_index=args.start, count=args.count)
+        if items:
+            print(f"{'ID':<10} {'Title':<20} {'URL'}")
+            print("-" * 60)
+            for item in items:
+                title = item['title'] or 'N/A'
+                url = item['url'] or 'N/A'
+                print(f"{item['id']:<10} {title:<20} {url}")
+        else:
+            print("No items found.")
 
 if __name__ == '__main__':
     main()
