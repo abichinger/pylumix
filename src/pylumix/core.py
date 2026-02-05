@@ -19,8 +19,6 @@ class LumixCamera:
         self.device_id = "4D454930-0100-1000-8001-020A0003BD13"
         self.device_name = "pylumix"
 
-        self._paired = False
-
     def _request(self, mode, **kwargs):
         params = {"mode": mode}
         params.update(kwargs)
@@ -50,7 +48,6 @@ class LumixCamera:
         if resp.status_code != 200:
             logger.warning(f"Auth failed. Response: {resp.text}")
             return False
-        self._paired = True
         return True
 
     def ensure_access(self):
@@ -71,12 +68,33 @@ class LumixCamera:
         """Get camera state (heartbeat)."""
         resp = self._request("getstate")
         return self._parse_xml(resp.text)
+    
+    def sd_access(self) -> bool:
+        state = self.get_state()
+        node = state.find(".//sd_access")
+        return node is not None and (node.text or "") == 'on'
 
-    def capture(self):
-        """Trigger capture."""
-        # Ensure we are in recording mode
+    def capture(self, timeout: float = 10.0, poll_interval: float = 0.2) -> bool:
+        """Trigger capture and wait until total_content_number increases by one.
+        Polls every poll_interval seconds (default 0.3s) up to timeout seconds.
+        Returns True on success, raises RuntimeError on failure/timeout.
+        """
         self.cam_cmd("recmode")
-        return self.cam_cmd("capture")
+
+        # Trigger capture
+        self.cam_cmd("capture")
+
+        sd_used = False
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            sd_access = self.sd_access()
+            if not sd_access and sd_used:
+                return True
+            sd_used = sd_used or sd_access
+            time.sleep(poll_interval)
+
+        # return False
+        raise RuntimeError("Timeout waiting for image")
 
     def video_recstart(self):
         self.cam_cmd("recmode")
@@ -151,8 +169,19 @@ class LumixCamera:
         time.sleep(1.0)
         resp = self._request("get_content_info")
         return self._parse_xml(resp.text)
+    
 
-    def download_file(self, filename, local_filename=None):
+    def total_content_number(self) -> int:
+        root = self.get_content_info()
+        node = root.find("total_content_number")
+        if node is None or (node.text or "").strip() == "":
+            raise RuntimeError("total_content_number not found in response")
+        try:
+            return int(node.text.strip())
+        except ValueError:
+            raise RuntimeError(f"Invalid total_content_number value: {node.text!r}")
+
+    def download_file(self, filename, local_filename=None): 
         """Download a file from the camera."""
         # Filename should be like /DL1000001.JPG
         # Ensure generic path construction if only ID provided?
