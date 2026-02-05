@@ -106,6 +106,45 @@ class LumixCamera:
         resp = self._request("stopstream")
         return self._parse_xml(resp.text)
 
+    def stream_preview(self, port=49152):
+        """Generator that yields UDP packets from the preview stream."""
+        self.cam_cmd("recmode")
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind(('0.0.0.0', port))
+        except OSError as e:
+            raise RuntimeError(f"Error binding to port {port}: {e}")
+
+        sock.settimeout(2.0)
+
+        try:
+            self.start_stream(port)
+            while True:
+                try:
+                    data, _ = sock.recvfrom(65536)
+                    yield data
+                except socket.timeout:
+                    # Send heartbeat to keep stream alive
+                    self.get_state()
+        finally:
+            try:
+                self.stop_stream()
+            except Exception:
+                pass
+            sock.close()
+
+    def get_preview_image(self, port=49152):
+        """Capture a single JPEG frame from the preview stream."""
+        for data in self.stream_preview(port):
+            # Simple check for JPEG in this packet (SOI ... EOI)
+            start = data.find(b'\xff\xd8')
+            end = data.find(b'\xff\xd9')
+
+            if start != -1 and end != -1 and end > start:
+                return data[start : end + 2]
+        return None
+
     def get_content_info(self):
         self.cam_cmd("playmode")
         # Wait a bit for the mode switch

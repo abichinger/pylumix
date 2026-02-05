@@ -23,7 +23,8 @@ def main():
     subparsers.add_parser('preview', help='Start live preview stream')
     
     # Image
-    subparsers.add_parser('image', help='Capture image')
+    img_parser = subparsers.add_parser('image', help='Capture image')
+    img_parser.add_argument('--preview', action='store_true', help='Capture from preview stream instead of full capture')
     
     # Video
     vid_parser = subparsers.add_parser('video', help='Record video')
@@ -66,21 +67,10 @@ def main():
     elif args.command == 'preview':
         # Preview logic receiving UDP stream
         udp_port = 49152
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # Allow reuse address to avoid binding errors if restarted quickly
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            sock.bind(('0.0.0.0', udp_port))
-        except OSError as e:
-            print(f"Error binding to port {udp_port}: {e}", file=sys.stderr)
-            sys.exit(1)
-
-        sock.settimeout(2.0)
         
         try:
             print(f"Starting preview stream on UDP {udp_port}...", file=sys.stderr)
             print("Press Ctrl+C to stop.", file=sys.stderr)
-            camera.start_stream(udp_port)
             
             output = sys.stdout.buffer if args.stdout else None
             
@@ -90,25 +80,18 @@ def main():
             if not output and not args.stdout:
                  print("Receiving stream but not saving/displaying (use --stdout or --out)...", file=sys.stderr)
 
-            while True:
-                try:
-                    data, addr = sock.recvfrom(65536)
-                    if output:
-                        output.write(data)
-                        output.flush()
-                except socket.timeout:
-                    # Send heartbeat to keep stream alive
-                    camera.get_state()
+            for data in camera.stream_preview(port=udp_port):
+                if output:
+                    output.write(data)
+                    output.flush()
+
         except KeyboardInterrupt:
             print("\nStopping preview...", file=sys.stderr)
+        except Exception as e:
+            print(f"\nError during preview: {e}", file=sys.stderr)
         finally:
-            try:
-                camera.stop_stream()
-            except Exception:
-                pass
             if args.out and output:
                 output.close()
-            sock.close()
 
     elif args.command == 'config':
         if args.value:
@@ -133,10 +116,26 @@ def main():
                      print(ET.tostring(res, encoding='unicode'))
 
     elif args.command == 'image':
-        print("Capturing image...", file=sys.stderr)
-        camera.capture()
-        # In a real app we'd poll for 'sd_access' or content count change
-        print("Image capture command sent.", file=sys.stderr)
+        if args.preview:
+            print("Capturing preview image...", file=sys.stderr)
+            img = camera.get_preview_image()
+            if img:
+                if args.out:
+                    with open(args.out, 'wb') as f:
+                        f.write(img)
+                    print(f"Saved preview image to {args.out}", file=sys.stderr)
+                elif args.stdout:
+                     sys.stdout.buffer.write(img)
+                     sys.stdout.buffer.flush()
+                else:
+                     print("Image captured (bytes), but no output specified. Use --out or --stdout.", file=sys.stderr)
+            else:
+                 print("Failed to capture preview image.", file=sys.stderr)
+        else:
+            print("Capturing image...", file=sys.stderr)
+            camera.capture()
+            # In a real app we'd poll for 'sd_access' or content count change
+            print("Image capture command sent.", file=sys.stderr)
 
     elif args.command == 'video':
         if args.action == 'start':
