@@ -17,8 +17,9 @@ def main():
     subparsers = parser.add_subparsers(dest='command', required=True)
     
     # Info
-    subparsers.add_parser('info', help='Get camera info')
-    
+    info_parser = subparsers.add_parser('info', help='Get camera info')
+    info_parser.add_argument('--content', action='store_true', help='Get content info')
+
     # Preview
     subparsers.add_parser('preview', help='Start live preview stream')
     
@@ -52,7 +53,10 @@ def main():
 
     if args.command == 'info':
         try:
-            state = camera.get_state()
+            if args.content:
+                state = camera.get_content_info()
+            else:
+                state = camera.get_state()
             # Basic printing of XML content recursively
             def print_elem(elem, level=0):
                 indent = "  " * level
