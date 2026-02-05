@@ -56,8 +56,8 @@ class LumixCamera:
     def ensure_access(self):
         # Check for access rejection and try to request access
         state = self.get_state()
-        camrply = state.find("camrply")
-        result = camrply.find("result") if camrply is not None else None
+        # The XML root is usually <camrply>, so we look for 'result' direct child
+        result = state.find("result")
 
         if result is not None and (result.text or "").strip() == "ok":
             return True
