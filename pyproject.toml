@@ -7,7 +7,7 @@ name = "pylumix"
 version = "0.1.0"
 description = "Control Panasonic Lumix cameras over Wi-Fi"
 readme = "README.md"
-authors = [{ name = "Andreas", email = "andreas@example.com" }]
+authors = [{ name = "Andreas Bichinger", email = "andreas.bichinger@gmail.com" }]
 dependencies = [
     "requests",
 ]
