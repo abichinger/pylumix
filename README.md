@@ -15,7 +15,7 @@ pip install .
 pylumix info
 
 # Preview stream to ffplay
-pylumix preview --stdout | ffplay -i pipe:0 -vcodec mjpeg
+pylumix --stdout preview | ffplay -i pipe:0 -vcodec mjpeg
 
 # Capture image
 pylumix image
